@@ -53,13 +53,17 @@ const PROV_FOLDER_MAP: Record<string, string> = {
 function ControlsOverlay({
   selectedProv,
   selectedKab,
+  selectedKec,
   setSelectedProv,
   setSelectedKab,
+  setSelectedKec,
 }: {
   selectedProv: { id: string, name: string } | null,
   selectedKab: { name: string, feature?: Feature<Geometry, AnyProps> } | null,
+  selectedKec: { name: string, feature?: Feature<Geometry, AnyProps> } | null,
   setSelectedProv: React.Dispatch<React.SetStateAction<{ id: string, name: string } | null>>,
   setSelectedKab: React.Dispatch<React.SetStateAction<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>>,
+  setSelectedKec: React.Dispatch<React.SetStateAction<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>>,
 }) {
   const map = useMap()
   return (
@@ -70,8 +74,11 @@ function ControlsOverlay({
         {selectedProv && !selectedKab && (
           <span>Provinsi → Kabupaten/Kota</span>
         )}
-        {selectedProv && selectedKab && (
+        {selectedProv && selectedKab && !selectedKec && (
           <span>Provinsi → Kabupaten/Kota → Kecamatan</span>
+        )}
+        {selectedProv && selectedKab && selectedKec && (
+          <span>Provinsi → Kabupaten/Kota → Kecamatan → Detail</span>
         )}
       </div>
       <div className="controls-actions">
@@ -79,6 +86,7 @@ function ControlsOverlay({
           <button onClick={() => {
             map.flyToBounds(indonesiaBounds, { padding: [24, 24], duration: 0.7 })
             map.once('moveend', () => {
+              setSelectedKec(null)
               setSelectedKab(null)
               setSelectedProv(null)
             })
@@ -90,11 +98,27 @@ function ControlsOverlay({
           <button onClick={() => {
             if (selectedKab?.feature) {
               fitToFeature(map as any, selectedKab.feature as any)
-              map.once('moveend', () => setSelectedKab(null))
+              map.once('moveend', () => {
+                setSelectedKec(null)
+                setSelectedKab(null)
+              })
             } else {
+              setSelectedKec(null)
               setSelectedKab(null)
             }
           }}>Back to Kabupaten</button>
+        )}
+        {selectedKab && selectedKec && (
+          <button onClick={() => {
+            // Back to all kecamatan (within same kabupaten)
+            // If we have the kabupaten feature, zoom to it before clearing
+            if (selectedKab?.feature) {
+              fitToFeature(map as any, selectedKab.feature as any)
+              map.once('moveend', () => setSelectedKec(null))
+            } else {
+              setSelectedKec(null)
+            }
+          }}>Back to All Kecamatan</button>
         )}
       </div>
     </div>
@@ -240,9 +264,18 @@ function normalizeRegencyName(name: string): string {
     .trim()
 }
 
-function KecamatanLayer({ provCode, kabName }: { provCode: string, kabName: string }) {
+function normalizeDistrictName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/^kecamatan\s+/i, '')
+    .replace(/^kec\.?\s+/i, '')
+    .trim()
+}
+
+function KecamatanLayer({ provCode, kabName, selectedKec, setSelectedKec }: { provCode: string, kabName: string, selectedKec: { name: string, feature?: Feature<Geometry, AnyProps> } | null, setSelectedKec: React.Dispatch<React.SetStateAction<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>> }) {
   // Districts are stored per province file, e.g. id31_dki_jakarta_district.geojson
   // We try to map provCode like "31" -> folder starting with id31_*
+  const map = useMap()
   const [provFolder, setProvFolder] = React.useState<string | null>(null)
   React.useEffect(() => {
     // Use the explicit mapping to the on-disk folder names
@@ -300,7 +333,7 @@ function KecamatanLayer({ provCode, kabName }: { provCode: string, kabName: stri
     const baseProps = { ...(feats[0]?.properties || {}), district: name }
     const merged: Feature<Geometry, AnyProps> = {
       type: 'Feature',
-      properties: baseProps,
+      properties: { ...baseProps, district_key: normalizeDistrictName(name) },
       geometry: {
         type: 'MultiPolygon',
         // coordinates: array of polygons (each polygon is array of linear rings)
@@ -311,13 +344,19 @@ function KecamatanLayer({ provCode, kabName }: { provCode: string, kabName: stri
     mergedFeatures.push(merged)
   }
 
+  // If a kecamatan is selected, only keep that feature
+  const visibleFeatures = selectedKec?.name
+    ? mergedFeatures.filter((f) => String((f.properties as any)?.district_key || normalizeDistrictName(getDistrictName(f))) === normalizeDistrictName(selectedKec.name))
+    : mergedFeatures
+
   const filtered: FeatureCollection<Geometry, AnyProps> = {
     type: 'FeatureCollection',
-    features: mergedFeatures,
+    features: visibleFeatures,
   }
 
   return (
     <GeoJSON
+      key={`kec-${kabName}-${selectedKec?.name || 'all'}`}
       data={filtered as any}
       style={() => ({ color: '#ffffff', weight: 1, fillColor: '#3a3a3a', fillOpacity: 0.2 })}
       onEachFeature={(feature, layer) => {
@@ -331,6 +370,14 @@ function KecamatanLayer({ provCode, kabName }: { provCode: string, kabName: stri
         layer.on('mouseout', () => {
           ;(layer as any).setStyle?.({ weight: 1, fillOpacity: 0.2 })
         })
+        layer.on('click', (e) => {
+          e.originalEvent?.stopPropagation?.()
+          const name = String((feature.properties as any)?.district || (feature.properties as any)?.name || '')
+          // Immediately focus to only the clicked kecamatan
+          setSelectedKec({ name, feature: feature as any })
+          // Then animate zoom into it
+          fitToFeature(map as any, feature as any)
+        })
       }}
     />
   )
@@ -339,6 +386,7 @@ function KecamatanLayer({ provCode, kabName }: { provCode: string, kabName: stri
 export default function IndonesiaMap() {
   const [selectedProv, setSelectedProv] = React.useState<{ id: string, name: string } | null>(null)
   const [selectedKab, setSelectedKab] = React.useState<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>(null)
+  const [selectedKec, setSelectedKec] = React.useState<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>(null)
 
   const handleProvinceClick: ClickHandlers['onProvinceClick'] = (f) => {
     const id = String(f.properties?.prov_id ?? '')
@@ -350,6 +398,7 @@ export default function IndonesiaMap() {
   const handleKabupatenClick: ClickHandlers['onKabupatenClick'] = (f) => {
     const name = String(f.properties?.name ?? '')
     setSelectedKab({ name, feature: f as any })
+    setSelectedKec(null)
   }
 
   return (
@@ -376,8 +425,10 @@ export default function IndonesiaMap() {
         <ControlsOverlay
           selectedProv={selectedProv}
           selectedKab={selectedKab}
+          selectedKec={selectedKec}
           setSelectedProv={setSelectedProv}
           setSelectedKab={setSelectedKab}
+          setSelectedKec={setSelectedKec}
         />
 
         {/* Level 1: Provinces (initial) */}
@@ -392,7 +443,7 @@ export default function IndonesiaMap() {
 
         {/* Level 3: Kecamatan for selected kabupaten within the selected province */}
         {selectedProv && selectedKab && (
-          <KecamatanLayer provCode={selectedProv.id} kabName={selectedKab.name} />
+          <KecamatanLayer provCode={selectedProv.id} kabName={selectedKab.name} selectedKec={selectedKec} setSelectedKec={setSelectedKec} />
         )}
       </MapContainer>
     </div>
