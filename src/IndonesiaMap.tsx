@@ -50,6 +50,57 @@ const PROV_FOLDER_MAP: Record<string, string> = {
   '94': 'id94_papua',
 }
 
+function ControlsOverlay({
+  selectedProv,
+  selectedKab,
+  setSelectedProv,
+  setSelectedKab,
+}: {
+  selectedProv: { id: string, name: string } | null,
+  selectedKab: { name: string, feature?: Feature<Geometry, AnyProps> } | null,
+  setSelectedProv: React.Dispatch<React.SetStateAction<{ id: string, name: string } | null>>,
+  setSelectedKab: React.Dispatch<React.SetStateAction<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>>,
+}) {
+  const map = useMap()
+  return (
+    <div className="controls-overlay">
+      <div className="controls-header">Level</div>
+      <div className="controls-level">
+        {!selectedProv && <span>Provinsi</span>}
+        {selectedProv && !selectedKab && (
+          <span>Provinsi → Kabupaten/Kota</span>
+        )}
+        {selectedProv && selectedKab && (
+          <span>Provinsi → Kabupaten/Kota → Kecamatan</span>
+        )}
+      </div>
+      <div className="controls-actions">
+        {selectedProv && (
+          <button onClick={() => {
+            map.flyToBounds(indonesiaBounds, { padding: [24, 24], duration: 0.7 })
+            map.once('moveend', () => {
+              setSelectedKab(null)
+              setSelectedProv(null)
+            })
+          }}>
+            Back to Provinces
+          </button>
+        )}
+        {selectedKab && (
+          <button onClick={() => {
+            if (selectedKab?.feature) {
+              fitToFeature(map as any, selectedKab.feature as any)
+              map.once('moveend', () => setSelectedKab(null))
+            } else {
+              setSelectedKab(null)
+            }
+          }}>Back to Kabupaten</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 type ClickHandlers = {
   onProvinceClick: (provFeature: Feature<Geometry, AnyProps>) => void
   onKabupatenClick: (kabFeature: Feature<Geometry, AnyProps>) => void
@@ -113,7 +164,7 @@ function fitToFeature(map: ReturnType<typeof useMap>, feature: Feature<Geometry,
     const north = Math.max(...lats)
     const west = Math.min(...lngs)
     const east = Math.max(...lngs)
-    map.fitBounds([[south, west], [north, east]], { padding: [24, 24] })
+    map.flyToBounds([[south, west], [north, east]], { padding: [24, 24], duration: 0.7 })
   }
 }
 
@@ -138,7 +189,7 @@ function ProvincesLayer({ onProvinceClick }: { onProvinceClick: ClickHandlers['o
         })
         layer.on('click', () => {
           fitToFeature(map, feature as any)
-          onProvinceClick(feature as any)
+          map.once('moveend', () => onProvinceClick(feature as any))
         })
       }}
     />
@@ -172,7 +223,7 @@ function KabupatenLayer({ provId, onKabupatenClick }: { provId: string, onKabupa
         layer.on('click', (e) => {
           e.originalEvent?.stopPropagation?.()
           fitToFeature(map, feature as any)
-          onKabupatenClick(feature as any)
+          map.once('moveend', () => onKabupatenClick(feature as any))
         })
       }}
     />
@@ -208,13 +259,62 @@ function KecamatanLayer({ provCode, kabName }: { provCode: string, kabName: stri
   if (!data) return null
 
   const target = normalizeRegencyName(kabName)
+  // Step 1: filter to the selected kabupaten
+  const filteredFeatures = data.features.filter((f) => {
+    const regName = String(f.properties?.regency || f.properties?.kabupaten || '').toLowerCase()
+    return normalizeRegencyName(regName) === target
+  })
+
+  // Helper: normalize district name from feature
+  const getDistrictName = (f: Feature<Geometry, AnyProps>): string => {
+    const p = f.properties || {}
+    return String(p.district || p.name || '').trim()
+  }
+
+  // Helper: ensure MultiPolygon coordinates array from Polygon/MultiPolygon
+  const toMultiPolygonCoords = (geom: Geometry | null | undefined): any[] => {
+    if (!geom) return []
+    if (geom.type === 'Polygon') {
+      // Polygon: coordinates -> [rings]
+      // Wrap to MultiPolygon: [[rings]]
+      return [(geom as any).coordinates]
+    }
+    if (geom.type === 'MultiPolygon') {
+      return (geom as any).coordinates
+    }
+    return []
+  }
+
+  // Step 2: dissolve by district name (merge all polygon parts into one MultiPolygon per district)
+  const groups = new Map<string, Feature<Geometry, AnyProps>[]>()
+  for (const f of filteredFeatures) {
+    const name = getDistrictName(f)
+    if (!groups.has(name)) groups.set(name, [])
+    groups.get(name)!.push(f)
+  }
+
+  const mergedFeatures: Feature<Geometry, AnyProps>[] = []
+  for (const [name, feats] of groups.entries()) {
+    const coords: any[] = []
+    for (const f of feats) coords.push(...toMultiPolygonCoords(f.geometry))
+    const baseProps = { ...(feats[0]?.properties || {}), district: name }
+    const merged: Feature<Geometry, AnyProps> = {
+      type: 'Feature',
+      properties: baseProps,
+      geometry: {
+        type: 'MultiPolygon',
+        // coordinates: array of polygons (each polygon is array of linear rings)
+        // We simply concatenate parts; no topological union required for display
+        coordinates: coords as any,
+      },
+    }
+    mergedFeatures.push(merged)
+  }
+
   const filtered: FeatureCollection<Geometry, AnyProps> = {
     type: 'FeatureCollection',
-    features: data.features.filter((f) => {
-      const regName = String(f.properties?.regency || f.properties?.kabupaten || '').toLowerCase()
-      return normalizeRegencyName(regName) === target
-    }),
-  } as any
+    features: mergedFeatures,
+  }
 
   return (
     <GeoJSON
@@ -238,7 +338,7 @@ function KecamatanLayer({ provCode, kabName }: { provCode: string, kabName: stri
 
 export default function IndonesiaMap() {
   const [selectedProv, setSelectedProv] = React.useState<{ id: string, name: string } | null>(null)
-  const [selectedKab, setSelectedKab] = React.useState<{ name: string } | null>(null)
+  const [selectedKab, setSelectedKab] = React.useState<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>(null)
 
   const handleProvinceClick: ClickHandlers['onProvinceClick'] = (f) => {
     const id = String(f.properties?.prov_id ?? '')
@@ -249,7 +349,7 @@ export default function IndonesiaMap() {
 
   const handleKabupatenClick: ClickHandlers['onKabupatenClick'] = (f) => {
     const name = String(f.properties?.name ?? '')
-    setSelectedKab({ name })
+    setSelectedKab({ name, feature: f as any })
   }
 
   return (
@@ -272,40 +372,13 @@ export default function IndonesiaMap() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
 
-        {/* Simple controls overlay */}
-        <div
-          style={{
-            position: 'absolute', zIndex: 1000, top: 10, left: 10,
-            background: 'white', borderRadius: 6, boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-            padding: 8, fontSize: 12,
-          }}
-        >
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Level</div>
-          <div>
-            {!selectedProv && <span>Provinsi</span>}
-            {selectedProv && !selectedKab && (
-              <span>Provinsi → Kabupaten/Kota</span>
-            )}
-            {selectedProv && selectedKab && (
-              <span>Provinsi → Kabupaten/Kota → Kecamatan</span>
-            )}
-          </div>
-          <div style={{ marginTop: 6, display: 'flex', gap: 6 }}>
-            {selectedProv && (
-              <button onClick={() => { setSelectedKab(null); setSelectedProv(null) }}>
-                Back to Provinces
-              </button>
-            )}
-            {selectedKab && (
-              <button onClick={() => setSelectedKab(null)}>Back to Kabupaten</button>
-            )}
-          </div>
-          {/* Basic hint if nothing rendered */}
-          <div style={{ marginTop: 6, color: '#666' }}>
-            Tips: If boundaries are not visible, check DevTools Console for fetch errors and ensure files exist under
-            <code> public/data/indonesia-district-master 3/</code>.
-          </div>
-        </div>
+        {/* Controls overlay with map-aware actions */}
+        <ControlsOverlay
+          selectedProv={selectedProv}
+          selectedKab={selectedKab}
+          setSelectedProv={setSelectedProv}
+          setSelectedKab={setSelectedKab}
+        />
 
         {/* Level 1: Provinces (initial) */}
         {!selectedProv && (
