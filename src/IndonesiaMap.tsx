@@ -124,7 +124,7 @@ function ProvincesLayer({ onProvinceClick }: { onProvinceClick: ClickHandlers['o
   return (
     <GeoJSON
       data={data as any}
-      style={() => ({ color: '#ffffff', weight: 1, fillColor: '#7a7a7a', fillOpacity: 0.3 })}
+      style={() => ({ color: '#ffffff', weight: 1, fillColor: '#5c5c5c', fillOpacity: 0.3 })}
       onEachFeature={(feature, layer) => {
         const p = feature.properties || {}
         const title = p.prov_name || p.name || 'Provinsi'
@@ -157,7 +157,7 @@ function KabupatenLayer({ provId, onKabupatenClick }: { provId: string, onKabupa
   return (
     <GeoJSON
       data={filtered as any}
-      style={() => ({ color: '#ffffff', weight: 1, fillColor: '#6a6a6a', fillOpacity: 0.25 })}
+      style={() => ({ color: '#ffffff', weight: 1, fillColor: '#4a4a4a', fillOpacity: 0.25 })}
       onEachFeature={(feature, layer) => {
         const p = feature.properties || {}
         const title = p.name || 'Kabupaten/Kota'
@@ -219,7 +219,7 @@ function KecamatanLayer({ provCode, kabName }: { provCode: string, kabName: stri
   return (
     <GeoJSON
       data={filtered as any}
-      style={() => ({ color: '#ffffff', weight: 1, fillColor: '#5a5a5a', fillOpacity: 0.2 })}
+      style={() => ({ color: '#ffffff', weight: 1, fillColor: '#3a3a3a', fillOpacity: 0.2 })}
       onEachFeature={(feature, layer) => {
         const p = feature.properties || {}
         const title = p.district || p.name || 'Kecamatan'
