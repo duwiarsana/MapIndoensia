@@ -128,7 +128,7 @@ function ProvincesLayer({ onProvinceClick }: { onProvinceClick: ClickHandlers['o
       onEachFeature={(feature, layer) => {
         const p = feature.properties || {}
         const title = p.prov_name || p.name || 'Provinsi'
-        layer.bindTooltip(`Provinsi: ${String(title)}`, { sticky: true })
+        layer.bindTooltip(`<strong>Provinsi:</strong> ${String(title)}`, { sticky: true })
         layer.on('mouseover', () => {
           ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.4 })
           ;(layer as any).bringToFront?.()
@@ -161,7 +161,7 @@ function KabupatenLayer({ provId, onKabupatenClick }: { provId: string, onKabupa
       onEachFeature={(feature, layer) => {
         const p = feature.properties || {}
         const title = p.name || 'Kabupaten/Kota'
-        layer.bindTooltip(`Kabupaten: ${String(title)}`, { sticky: true })
+        layer.bindTooltip(`<strong>Kabupaten:</strong> ${String(title)}`, { sticky: true })
         layer.on('mouseover', () => {
           ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.35 })
           ;(layer as any).bringToFront?.()
@@ -223,7 +223,7 @@ function KecamatanLayer({ provCode, kabName }: { provCode: string, kabName: stri
       onEachFeature={(feature, layer) => {
         const p = feature.properties || {}
         const title = p.district || p.name || 'Kecamatan'
-        layer.bindTooltip(`Kecamatan: ${String(title)}`, { sticky: true })
+        layer.bindTooltip(`<strong>Kecamatan:</strong> ${String(title)}`, { sticky: true })
         layer.on('mouseover', () => {
           ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.3 })
           ;(layer as any).bringToFront?.()
