@@ -178,3 +178,30 @@ React.useEffect(() => {
 - Semua logika nilai berada di `src/IndonesiaMap.tsx` pada layer: `ProvincesLayer`, `KabupatenLayer`, `KecamatanLayer`.
 - Ubah sumber skor di fungsi `style` dan `onEachFeature` per layer.
 - Jika kunci ID API berbeda, sesuaikan normalisasi dan pemetaan kunci sebelum dipakai untuk lookup skor.
+
+## Git LFS untuk GeoJSON Besar
+
+Repo ini menggunakan Git LFS untuk file besar GeoJSON di folder `public/data/indonesia-district-master 3/`.
+
+1) Instal Git LFS (sekali saja)
+```bash
+git lfs install
+```
+
+2) Pola track yang dipakai (sudah di `.gitattributes`)
+```bash
+git lfs track "public/data/indonesia-district-master 3/**/*.geojson"
+```
+
+3) Commit & push seperti biasa
+```bash
+git add .gitattributes "public/data/indonesia-district-master 3"
+git commit -m "chore(lfs): track large district GeoJSON with Git LFS"
+git push
+```
+
+4) Clone/pull pengguna
+- Pastikan sudah menjalankan `git lfs install` di mesin lokal.
+- Lakukan `git pull` seperti biasa; Git LFS akan mengunduh konten besar secara otomatis.
+
+Tips: Jika bandwidth terbatas, bisa membatasi folder/provinsi tertentu atau melakukan shallow clone, lalu unduh file besar sesuai kebutuhan.
