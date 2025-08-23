@@ -205,3 +205,100 @@ git push
 - Lakukan `git pull` seperti biasa; Git LFS akan mengunduh konten besar secara otomatis.
 
 Tips: Jika bandwidth terbatas, bisa membatasi folder/provinsi tertentu atau melakukan shallow clone, lalu unduh file besar sesuai kebutuhan.
+
+## Integrasi ke Aplikasi Lain (Embedding)
+
+Anda dapat menggunakan komponen peta langsung di aplikasi lain.
+
+1) Import komponen
+```tsx
+import IndonesiaMap from './src/IndonesiaMap'
+
+export default function Page() {
+  return (
+    <div style={{ height: '100vh' }}>
+      <IndonesiaMap />
+    </div>
+  )
+}
+```
+
+2) Opsi konfigurasi umum
+- Pusat/zoom awal dapat diubah dari dalam `IndonesiaMap.tsx` (`center`, `zoom`, `minZoom`).
+- Tile dapat diganti mengubah `TileLayer.url` & `TileLayer.attribution`.
+- Pembatasan panning: set `maxBounds` (lihat variabel `indonesiaBounds`).
+
+3) Override atau kustomisasi
+- Untuk integrasi yang lebih dalam, Anda bisa fork file `src/IndonesiaMap.tsx` dan mengekspos props (mis. `initialCenter`, `initialZoom`, `tileUrl`).
+
+## Kontrak API yang Dipakai
+
+App ini memanfaatkan data nilai/score dan lokasi sekolah. Berikut kontrak minimal yang disarankan:
+
+- Provinces score: `GET ${VITE_API}/api/province-population` (contoh) → kunci `geoId` cocok ke `feature.properties.prov_id`.
+- Kabupaten score: `GET ${VITE_API}/api/kabupaten-population?provId={prov_id}` → kunci nama-ternormalisasi cocok ke `feature.properties.name`.
+- Kecamatan score: `GET ${VITE_API}/api/kecamatan-population?kabupaten={kab_norm}` → kunci `district_key` cocok ke `feature.properties.district_key`.
+- Sekolah per kecamatan: `GET ${VITE_API}/api/schools?district_key={district_key}` → daftar `{ id, name, lat, lng, level? }`.
+
+Catatan mapping kunci:
+- Provinsi: `geoId` ↔ `prov_id`.
+- Kabupaten: nama ternormalisasi (hapus "Kabupaten", "Kota", "Kota Adm.") ↔ `name`.
+- Kecamatan: `district_key` ↔ `district_key`.
+
+## Hook & Interaksi
+
+- Klik kecamatan: state `selectedKec` akan berisi feature kecamatan terpilih dan peta zoom ke boundary tersebut.
+- Contoh hook memuat sekolah saat fokus kecamatan berubah ada pada bagian "Memuat Lokasi Sekolah (API)" di atas.
+- Tooltip kecamatan disembunyikan saat fokus agar tidak mengganggu.
+
+## Deployment Notes
+
+- Vite base path: jika deploy di subfolder (mis. GitHub Pages), atur `base` di `vite.config.ts`.
+- Set environment di hosting (Netlify/Vercel/Docker): `VITE_API` harus diset agar fetch API ke backend berjalan.
+- CORS: pastikan backend mengizinkan origin domain aplikasi.
+- Asset besar: gunakan Git LFS (sudah diaktifkan), pertimbangkan CDN untuk file GeoJSON berat.
+
+## Kinerja & Optimasi
+
+- Muat data bertahap: hanya load kabupaten/kecamatan saat dibutuhkan.
+- Simplifikasi GeoJSON jika diperlukan (mis. dengan `turf.simplify`) untuk memperkecil ukuran.
+- Cache HTTP untuk data statis (tile, GeoJSON) via headers (Cache-Control/ETag).
+- Hindari render berulang: memoize hasil normalisasi nama/kunci.
+
+## Dukungan Browser
+
+- Modern evergreen browsers (Chrome, Edge, Firefox, Safari terbaru). IE tidak didukung.
+- Uji di perangkat mobile bila target pengguna mobile.
+
+## Troubleshooting Tambahan
+
+- Peta kosong: cek Network untuk tile/API dan nilai `VITE_API`.
+- Warna skor tidak muncul: cek kesesuaian kunci mapping (prov_id/nama_norm/district_key).
+- Marker sekolah tidak bisa diklik: pastikan marker berada di pane `markerPane` (sudah diatur), atau kurangi `fillOpacity` polygon.
+- Ukuran repo besar: pastikan `git lfs install` dijalankan sebelum clone/pull.
+
+## Contoh Kode Siap Pakai
+
+1) Minimal embed
+```tsx
+import IndonesiaMap from './src/IndonesiaMap'
+
+export default function App() {
+  return <div style={{ height: '100vh' }}><IndonesiaMap /></div>
+}
+```
+
+2) Memuat sekolah saat kecamatan dipilih (pseudocode ringkas)
+```tsx
+const HOST = import.meta.env.VITE_API
+const [schools, setSchools] = React.useState([])
+
+React.useEffect(() => {
+  if (!selectedKec?.feature) { setSchools([]); return }
+  const key = String((selectedKec.feature.properties as any)?.district_key || '')
+  if (!key) { setSchools([]); return }
+  fetch(`${HOST}/api/schools?district_key=${encodeURIComponent(key)}`)
+    .then(r => r.json())
+    .then(setSchools)
+    .catch(() => setSchools([]))
+}, [selectedKec])
