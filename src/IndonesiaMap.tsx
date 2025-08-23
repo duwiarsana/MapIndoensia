@@ -58,67 +58,76 @@ function ControlsOverlay({
   setSelectedKab,
   setSelectedKec,
 }: {
-  selectedProv: { id: string, name: string } | null,
+  selectedProv: { id: string, name: string, feature?: Feature<Geometry, AnyProps> } | null,
   selectedKab: { name: string, feature?: Feature<Geometry, AnyProps> } | null,
   selectedKec: { name: string, feature?: Feature<Geometry, AnyProps> } | null,
-  setSelectedProv: React.Dispatch<React.SetStateAction<{ id: string, name: string } | null>>,
+  setSelectedProv: React.Dispatch<React.SetStateAction<{ id: string, name: string, feature?: Feature<Geometry, AnyProps> } | null>>,
   setSelectedKab: React.Dispatch<React.SetStateAction<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>>,
   setSelectedKec: React.Dispatch<React.SetStateAction<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>>,
 }) {
   const map = useMap()
   return (
     <div className="controls-overlay">
-      <div className="controls-header">Level</div>
-      <div className="controls-level">
-        {!selectedProv && <span>Provinsi</span>}
-        {selectedProv && !selectedKab && (
-          <span>Provinsi → Kabupaten/Kota</span>
-        )}
-        {selectedProv && selectedKab && !selectedKec && (
-          <span>Provinsi → Kabupaten/Kota → Kecamatan</span>
-        )}
-        {selectedProv && selectedKab && selectedKec && (
-          <span>Provinsi → Kabupaten/Kota → Kecamatan → Detail</span>
-        )}
-      </div>
+      {(() => {
+        const crumbs: string[] = ['Provinsi']
+        if (selectedProv) crumbs.push('Kabupaten/Kota')
+        if (selectedProv && selectedKab) crumbs.push('Kecamatan')
+        if (selectedProv && selectedKab && selectedKec) crumbs.push('Detail')
+        return (
+          <div className="controls-breadcrumb">
+            {crumbs.map((c, i) => (
+              <React.Fragment key={c + i}>
+                <span className={`crumb${i === crumbs.length - 1 ? ' active' : ''}`}>{c}</span>
+                {i < crumbs.length - 1 && <span className="sep">›</span>}
+              </React.Fragment>
+            ))}
+          </div>
+        )
+      })()}
       <div className="controls-actions">
         {selectedProv && (
-          <button onClick={() => {
-            map.flyToBounds(indonesiaBounds, { padding: [24, 24], duration: 0.7 })
-            map.once('moveend', () => {
+          <button
+            className="btn-back"
+            onClick={() => {
+              // Single context-aware back button:
+              // 1) From Detail (kecamatan selected) -> back to Kecamatan list
+              if (selectedKab && selectedKec) {
+                if (selectedKab?.feature) {
+                  fitToFeature(map as any, selectedKab.feature as any)
+                  map.once('moveend', () => setSelectedKec(null))
+                } else {
+                  setSelectedKec(null)
+                }
+                return
+              }
+              // 2) From Kecamatan list -> back to Kabupaten list (within province)
+              // Desired: end on kabupaten list with the map showing the full selected province
+              if (selectedKab && !selectedKec) {
+                if (selectedProv?.feature) {
+                  // Zoom to province first, then switch layer to kabupaten list
+                  fitToFeature(map as any, selectedProv.feature as any)
+                  map.once('moveend', () => setSelectedKab(null))
+                } else {
+                  setSelectedKab(null)
+                }
+                return
+              }
+              // 3) From Kabupaten list (selectedProv only) -> back to Provinces
+              // Clear selection first so layers update, then zoom out to Indonesia
               setSelectedKec(null)
               setSelectedKab(null)
-              setSelectedProv(null)
-            })
-          }}>
-            Back to Provinces
-          </button>
-        )}
-        {selectedKab && (
-          <button onClick={() => {
-            if (selectedKab?.feature) {
-              fitToFeature(map as any, selectedKab.feature as any)
+              // Start zoom-out first; only after it finishes, clear selectedProv
+              // so the Provinces layer mounts and loads AFTER the zoom completes.
+              map.flyToBounds(indonesiaBounds, { padding: [24, 24], duration: 0.7 })
               map.once('moveend', () => {
-                setSelectedKec(null)
-                setSelectedKab(null)
+                setSelectedProv(null)
               })
-            } else {
-              setSelectedKec(null)
-              setSelectedKab(null)
-            }
-          }}>Back to Kabupaten</button>
-        )}
-        {selectedKab && selectedKec && (
-          <button onClick={() => {
-            // Back to all kecamatan (within same kabupaten)
-            // If we have the kabupaten feature, zoom to it before clearing
-            if (selectedKab?.feature) {
-              fitToFeature(map as any, selectedKab.feature as any)
-              map.once('moveend', () => setSelectedKec(null))
-            } else {
-              setSelectedKec(null)
-            }
-          }}>Back to All Kecamatan</button>
+            }}
+          >
+            {selectedKab && selectedKec && 'Kembali ke Semua Kecamatan'}
+            {selectedKab && !selectedKec && 'Kembali ke Kabupaten/Kota'}
+            {!selectedKab && 'Kembali ke Provinsi'}
+          </button>
         )}
       </div>
     </div>
@@ -384,15 +393,15 @@ function KecamatanLayer({ provCode, kabName, selectedKec, setSelectedKec }: { pr
 }
 
 export default function IndonesiaMap() {
-  const [selectedProv, setSelectedProv] = React.useState<{ id: string, name: string } | null>(null)
+  const [selectedProv, setSelectedProv] = React.useState<{ id: string, name: string, feature?: Feature<Geometry, AnyProps> } | null>(null)
   const [selectedKab, setSelectedKab] = React.useState<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>(null)
   const [selectedKec, setSelectedKec] = React.useState<{ name: string, feature?: Feature<Geometry, AnyProps> } | null>(null)
 
-  const handleProvinceClick: ClickHandlers['onProvinceClick'] = (f) => {
+  const handleProvinceClick: ClickHandlers["onProvinceClick"] = (f) => {
     const id = String(f.properties?.prov_id ?? '')
     const name = String(f.properties?.prov_name ?? f.properties?.name ?? '')
     setSelectedKab(null)
-    setSelectedProv({ id, name })
+    setSelectedProv({ id, name, feature: f as any })
   }
 
   const handleKabupatenClick: ClickHandlers['onKabupatenClick'] = (f) => {
