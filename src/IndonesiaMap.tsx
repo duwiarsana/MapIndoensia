@@ -1,5 +1,5 @@
 import React from 'react'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, GeoJSON, useMap, CircleMarker, Popup } from 'react-leaflet'
 import type { Feature, FeatureCollection, Geometry } from 'geojson'
 import type { LatLngBoundsExpression, LatLngTuple } from 'leaflet'
 
@@ -10,6 +10,164 @@ const indonesiaBounds: LatLngBoundsExpression = [
 ]
 
 type AnyProps = Record<string, any>
+
+// --- Value display helpers (dummy demo) ---
+// Deterministic pseudo-random score from a string key (range ~20..95)
+function dummyScore(key: string): number {
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0
+  const n = (h % 76) + 20 // 20..95
+  return Math.max(0, Math.min(100, n))
+}
+
+// Color scale helper (low -> high)
+function colorForValue(v?: number | null): string {
+  if (v == null || Number.isNaN(v)) return '#5c5c5c' // no data -> gray
+  return v > 60 ? '#2e7d32' /* green */ : '#d32f2f' /* red */
+}
+
+// --- Geometry helpers for dummy school placement ---
+function centroidOf(geom: Geometry): LatLngTuple | null {
+  try {
+    if (geom.type === 'Polygon') {
+      const rings = (geom.coordinates as any[])
+      let sumLat = 0, sumLng = 0, count = 0
+      rings.forEach((ring) => {
+        ring.forEach((pt: [number, number]) => { sumLng += pt[0]; sumLat += pt[1]; count++ })
+      })
+      if (count === 0) return null
+      return [sumLat / count, sumLng / count]
+    }
+    if (geom.type === 'MultiPolygon') {
+      const polys = (geom.coordinates as any[])
+      if (!polys.length) return null
+      const first = polys[0]
+      let sumLat = 0, sumLng = 0, count = 0
+      first.forEach((ring: any[]) => {
+        ring.forEach((pt: [number, number]) => { sumLng += pt[0]; sumLat += pt[1]; count++ })
+      })
+      if (count === 0) return null
+      return [sumLat / count, sumLng / count]
+    }
+  } catch {}
+  return null
+}
+
+function seededRng(seedStr: string) {
+  let h = 2166136261 >>> 0
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return function next() {
+    // xorshift32
+    h ^= h << 13; h >>>= 0
+    h ^= h >> 17; h >>>= 0
+    h ^= h << 5;  h >>>= 0
+    return (h >>> 0) / 0xffffffff
+  }
+}
+
+// Compute bbox [minLng, minLat, maxLng, maxLat] from geometry
+function geometryBBox(geom: Geometry | null | undefined): [number, number, number, number] | null {
+  if (!geom) return null
+  let minLat = Infinity, minLng = Infinity, maxLat = -Infinity, maxLng = -Infinity
+  const push = (c: any) => {
+    if (typeof c?.[0] === 'number' && typeof c?.[1] === 'number') {
+      const lng = c[0]; const lat = c[1]
+      if (lat < minLat) minLat = lat
+      if (lat > maxLat) maxLat = lat
+      if (lng < minLng) minLng = lng
+      if (lng > maxLng) maxLng = lng
+    } else if (Array.isArray(c)) {
+      c.forEach(push)
+    }
+  }
+  // @ts-expect-error traverse coords
+  push(geom.coordinates)
+  if (!Number.isFinite(minLat)) return null
+  return [minLng, minLat, maxLng, maxLat]
+}
+
+// Ray casting point in polygon for a single ring
+function pointInRing(lng: number, lat: number, ring: [number, number][]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1]
+    const xj = ring[j][0], yj = ring[j][1]
+    const intersect = ((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi + 1e-12) + xi)
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
+// GeoJSON Polygon: [ [outer], [hole1], ... ] ; MultiPolygon: [ [rings...], [rings...] ]
+function pointInPolygonGeo(lng: number, lat: number, geom: Geometry): boolean {
+  if (geom.type === 'Polygon') {
+    const rings = (geom.coordinates as any[])
+    if (!rings.length) return false
+    const inOuter = pointInRing(lng, lat, rings[0] as any)
+    if (!inOuter) return false
+    for (let k = 1; k < rings.length; k++) {
+      if (pointInRing(lng, lat, rings[k] as any)) return false // inside a hole
+    }
+    return true
+  }
+  if (geom.type === 'MultiPolygon') {
+    const polys = (geom.coordinates as any[])
+    for (const poly of polys) {
+      if (!poly?.length) continue
+      const inOuter = pointInRing(lng, lat, poly[0] as any)
+      if (inOuter) {
+        let inHole = false
+        for (let k = 1; k < poly.length; k++) {
+          if (pointInRing(lng, lat, poly[k] as any)) { inHole = true; break }
+        }
+        if (!inHole) return true
+      }
+    }
+  }
+  return false
+}
+
+function generateDummySchoolsInside(geom: Geometry, seed: string) {
+  const rng = seededRng(seed)
+  const count = 5 + Math.floor(rng() * 6) // 5..10 nodes
+  const bbox = geometryBBox(geom)
+  const pts: { id: string, name: string, lat: number, lng: number }[] = []
+  if (!bbox) return pts
+  const [minLng, minLat, maxLng, maxLat] = bbox
+  let attempts = 0
+  for (let i = 0; i < count; i++) {
+    // rejection sampling inside bbox until point is inside polygon
+    let placed = false
+    for (let tries = 0; tries < 200; tries++) {
+      const lng = minLng + rng() * (maxLng - minLng)
+      const lat = minLat + rng() * (maxLat - minLat)
+      if (pointInPolygonGeo(lng, lat, geom)) {
+        pts.push({ id: `${seed}-${i}`, name: `Sekolah Dummy ${i + 1}`, lat, lng })
+        placed = true
+        break
+      }
+    }
+    if (!placed) attempts++
+  }
+  // fallback: if none placed (degenerate geom), try centroid jitter
+  if (pts.length === 0) {
+    const c = centroidOf(geom)
+    if (c) {
+      const [lat0, lng0] = c
+      for (let i = 0; i < Math.max(3, count); i++) {
+        const angle = rng() * Math.PI * 2
+        const r = rng() * 0.01
+        const lat = lat0 + Math.cos(angle) * r
+        const lng = lng0 + Math.sin(angle) * r
+        pts.push({ id: `${seed}-fb-${i}`, name: `Sekolah Dummy ${i + 1}`, lat, lng })
+      }
+    }
+  }
+  return pts
+}
 
 // Map province code (string) -> district folder name under public/data/indonesia-district-master 3/
 // Derived from on-disk folders (e.g., id31_dki_jakarta)
@@ -208,17 +366,25 @@ function ProvincesLayer({ onProvinceClick }: { onProvinceClick: ClickHandlers['o
   return (
     <GeoJSON
       data={data as any}
-      style={() => ({ color: '#ffffff', weight: 1, fillColor: '#5c5c5c', fillOpacity: 0.3 })}
+      style={(feature?: any) => {
+        const pid = String(feature?.properties?.prov_id ?? '')
+        const score = pid ? dummyScore(pid) : undefined
+        return { color: '#ffffff', weight: 1, fillColor: colorForValue(score), fillOpacity: 0.6 }
+      }}
       onEachFeature={(feature, layer) => {
         const p = feature.properties || {}
         const title = p.prov_name || p.name || 'Provinsi'
-        layer.bindTooltip(`<strong>Provinsi:</strong> ${String(title)}`, { sticky: true })
+        const pid = String(p.prov_id ?? '')
+        const score = pid ? dummyScore(pid) : null
+        const scoreHtml = score != null ? `<br/><small>Skor: <strong>${score}</strong></small>` : ''
+        layer.bindTooltip(`<strong>Provinsi:</strong> ${String(title)}${scoreHtml}`, { sticky: true })
         layer.on('mouseover', () => {
-          ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.4 })
+          ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.7 })
           ;(layer as any).bringToFront?.()
         })
         layer.on('mouseout', () => {
-          ;(layer as any).setStyle?.({ weight: 1, fillOpacity: 0.3 })
+          const base = pid ? dummyScore(pid) : null
+          ;(layer as any).setStyle?.({ weight: 1, fillOpacity: 0.6, fillColor: colorForValue(base) })
         })
         layer.on('click', () => {
           fitToFeature(map, feature as any)
@@ -241,17 +407,26 @@ function KabupatenLayer({ provId, onKabupatenClick }: { provId: string, onKabupa
   return (
     <GeoJSON
       data={filtered as any}
-      style={() => ({ color: '#ffffff', weight: 1, fillColor: '#4a4a4a', fillOpacity: 0.25 })}
+      style={(feature?: any) => {
+        const p = feature?.properties || {}
+        const kabName = normalizeRegencyName(String(p.name || ''))
+        const score = kabName ? dummyScore(`kab:${kabName}`) : undefined
+        return { color: '#ffffff', weight: 1, fillColor: colorForValue(score), fillOpacity: 0.55 }
+      }}
       onEachFeature={(feature, layer) => {
         const p = feature.properties || {}
         const title = p.name || 'Kabupaten/Kota'
-        layer.bindTooltip(`<strong>Kabupaten:</strong> ${String(title)}`, { sticky: true })
+        const kabName = normalizeRegencyName(String(p.name || ''))
+        const score = kabName ? dummyScore(`kab:${kabName}`) : null
+        const scoreHtml = score != null ? `<br/><small>Skor: <strong>${score}</strong></small>` : ''
+        layer.bindTooltip(`<strong>Kabupaten:</strong> ${String(title)}${scoreHtml}`, { sticky: true })
         layer.on('mouseover', () => {
-          ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.35 })
+          ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.65 })
           ;(layer as any).bringToFront?.()
         })
         layer.on('mouseout', () => {
-          ;(layer as any).setStyle?.({ weight: 1, fillOpacity: 0.25 })
+          const base = kabName ? dummyScore(`kab:${kabName}`) : null
+          ;(layer as any).setStyle?.({ weight: 1, fillOpacity: 0.55, fillColor: colorForValue(base) })
         })
         layer.on('click', (e) => {
           e.originalEvent?.stopPropagation?.()
@@ -364,31 +539,65 @@ function KecamatanLayer({ provCode, kabName, selectedKec, setSelectedKec }: { pr
   }
 
   return (
-    <GeoJSON
-      key={`kec-${kabName}-${selectedKec?.name || 'all'}`}
-      data={filtered as any}
-      style={() => ({ color: '#ffffff', weight: 1, fillColor: '#3a3a3a', fillOpacity: 0.2 })}
-      onEachFeature={(feature, layer) => {
-        const p = feature.properties || {}
-        const title = p.district || p.name || 'Kecamatan'
-        layer.bindTooltip(`<strong>Kecamatan:</strong> ${String(title)}`, { sticky: true })
-        layer.on('mouseover', () => {
-          ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.3 })
-          ;(layer as any).bringToFront?.()
-        })
-        layer.on('mouseout', () => {
-          ;(layer as any).setStyle?.({ weight: 1, fillOpacity: 0.2 })
-        })
-        layer.on('click', (e) => {
-          e.originalEvent?.stopPropagation?.()
-          const name = String((feature.properties as any)?.district || (feature.properties as any)?.name || '')
-          // Immediately focus to only the clicked kecamatan
-          setSelectedKec({ name, feature: feature as any })
-          // Then animate zoom into it
-          fitToFeature(map as any, feature as any)
-        })
-      }}
-    />
+    <>
+      <GeoJSON
+        key={`kec-${kabName}-${selectedKec?.name || 'all'}`}
+        data={filtered as any}
+        style={(feature?: any) => {
+          const key = String(feature?.properties?.district_key || '')
+          const score = key ? dummyScore(`kec:${key}`) : undefined
+          return { color: '#ffffff', weight: 1, fillColor: colorForValue(score), fillOpacity: 0.5 }
+        }}
+        onEachFeature={(feature, layer) => {
+          const p = feature.properties || {}
+          const title = p.district || p.name || 'Kecamatan'
+          const key = String(p.district_key || '')
+          const score = key ? dummyScore(`kec:${key}`) : null
+          const scoreHtml = score != null ? `<br/><small>Skor: <strong>${score}</strong></small>` : ''
+          // When focused on a kecamatan (selectedKec set), do not show tooltip
+          if (!selectedKec) {
+            layer.bindTooltip(`<strong>Kecamatan:</strong> ${String(title)}${scoreHtml}`, { sticky: true })
+          }
+          layer.on('mouseover', () => {
+            ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.6 })
+            ;(layer as any).bringToFront?.()
+          })
+          layer.on('mouseout', () => {
+            const base = key ? dummyScore(`kec:${key}`) : null
+            ;(layer as any).setStyle?.({ weight: 1, fillOpacity: 0.5, fillColor: colorForValue(base) })
+          })
+          layer.on('click', (e) => {
+            e.originalEvent?.stopPropagation?.()
+            const name = String((feature.properties as any)?.district || (feature.properties as any)?.name || '')
+            // Immediately focus to only the clicked kecamatan
+            setSelectedKec({ name, feature: feature as any })
+            // Then animate zoom into it
+            fitToFeature(map as any, feature as any)
+          })
+        }}
+      />
+      {/* Dummy school markers when a kecamatan is focused (kept inside boundary) */}
+      {selectedKec && (() => {
+        const g: Geometry | undefined = (selectedKec.feature as any)?.geometry
+        if (!g) return null
+        const keySeed = String((selectedKec.feature as any)?.properties?.district_key || (selectedKec.feature as any)?.properties?.name || 'kec')
+        const nodes = generateDummySchoolsInside(g, `school:${keySeed}`)
+        return (
+          <>
+            {nodes.map(n => (
+              <CircleMarker pane="markerPane" key={n.id} center={[n.lat, n.lng]} radius={5} pathOptions={{ color: '#1976d2', fillColor: '#1976d2', fillOpacity: 0.9 }}>
+                <Popup>
+                  <div>
+                    <strong>{n.name}</strong>
+                    <div>Lat: {n.lat.toFixed(5)}, Lng: {n.lng.toFixed(5)}</div>
+                  </div>
+                </Popup>
+              </CircleMarker>
+            ))}
+          </>
+        )
+      })()}
+    </>
   )
 }
 
