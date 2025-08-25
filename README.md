@@ -81,13 +81,47 @@ Diagram berikut merangkum alur navigasi dan tooltip pada peta.
 
 ```mermaid
 flowchart TD
+    %% Navigasi layer peta
     A[Start App: Provinces Layer] -->|Click Province| B[Zoom ke Provinsi + tampilkan Kabupaten Layer]
     B -->|Click Kabupaten| C[Zoom ke Kabupaten + tampilkan Kecamatan Layer]
     C -->|Click Kecamatan| D[Pilih Kecamatan + Highlight + Update Breadcrumb]
-    A -.->|Hover / Tooltip| T[Tooltip: label "Skor:" dan nilai tebal + warna mengikuti fillColor]
+    D -->|Back / Reset| A
+
+    %% Pipa data skor untuk pewarnaan + tooltip
+    subgraph S[Pipeline Data Skor]
+      direction TB
+      S0{VITE_API diset?}
+      S0 -->|Ya| S1[Fetch skor dari API per level\n/province-population\n/kabupaten-population\n/kecamatan-population]
+      S0 -->|Tidak| S2[Gunakan dummyScore(..) deterministik]
+      S1 --> S3[colorForValue(score) -> fillColor]
+      S2 --> S3[colorForValue(score) -> fillColor]
+      S3 --> S4[Style layer: fillColor + tooltip\n"Skor:" dan nilai: bold + warna = fillColor]
+    end
+
+    %% Hubungan pipeline data dengan tiap layer
+    A -. Memakai .-> S
+    B -. Memakai .-> S
+    C -. Memakai .-> S
+
+    %% Tooltip di setiap level
+    A -.->|Hover / Tooltip| T[Tooltip mencerminkan skor, bold + warna = fillColor]
     B -.->|Hover / Tooltip| T
     C -.->|Hover / Tooltip| T
-    D -->|Back / Reset| A
+
+    %% Muat data sekolah saat fokus kecamatan
+    subgraph K[Data Sekolah pada Fokus Kecamatan]
+      direction TB
+      K1{selectedKec ada?}
+      K1 -->|Ya| K2[Ambil district_key dari feature]
+      K2 --> K3[Fetch sekolah: GET ${VITE_API}/api/schools?district_key=...]
+      K3 --> K4[Tampilkan CircleMarker per sekolah]
+      K1 -->|Tidak| K5[Sembunyikan/clear markers]
+      K3 -.-> K6{Error/empty?}
+      K6 -->|Ya| K7[Fallback: tidak tampilkan marker / tampilkan pesan]
+      K6 -->|Tidak| K4
+    end
+
+    D --> K1
 ```
 
 Catatan:
