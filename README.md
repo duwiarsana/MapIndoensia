@@ -84,8 +84,11 @@ flowchart TD
     %% Navigasi layer peta
     A[Start App: Provinces Layer] -->|Click Province| B[Zoom ke Provinsi + tampilkan Kabupaten Layer]
     B -->|Click Kabupaten| C[Zoom ke Kabupaten + tampilkan Kecamatan Layer]
-    C -->|Click Kecamatan| D[Pilih Kecamatan + Highlight + Update Breadcrumb]
-    D -->|Back / Reset| A
+    C -->|Click Kecamatan| D[Pilih Kecamatan + Highlight]
+
+    %% Aksi kembali (controls/breadcrumb)
+    D -->|Back to All Kecamatan| C
+    C -->|Back to Provinces| A
 
     %% Pipa data skor untuk pewarnaan + tooltip
     subgraph S[Pipeline Data Skor]
@@ -122,6 +125,27 @@ flowchart TD
     end
 
     D --> K1
+
+    %% Breadcrumb update dan navigasi via breadcrumb
+    subgraph BRC[Breadcrumb]
+      direction TB
+      BR0[Level: Provinsi]:::crumb
+      BR1[Provinsi > {Prov}]:::crumb
+      BR2[Provinsi > {Prov} > {Kab}]:::crumb
+      BR3[Provinsi > {Prov} > {Kab} > {Kec}]:::crumb
+    end
+
+    classDef crumb fill:#f7f7f7,stroke:#999,rx:4,ry:4,color:#333
+
+    %% Update breadcrumb saat navigasi turun
+    A --> BR0
+    B --> BR1
+    C --> BR2
+    D --> BR3
+
+    %% Klik breadcrumb untuk naik level
+    BR3 -.Click {Kab} .-> C
+    BR2 -.Click {Prov} .-> A
 ```
 
 Catatan:
