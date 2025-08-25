@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2025-08-25
+
+### Changed
+
+- Tooltip: label "Skor:" dan nilai skor sekarang tebal (bold) dan berwarna sama dengan warna blok wilayah (mengikuti `fillColor`).
+
 ## [0.3.0] - 2025-08-23
 ### Added
 - Kecamatan layer: dissolve polygons with the same name into a single boundary for clarity.

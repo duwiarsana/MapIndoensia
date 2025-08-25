@@ -36,6 +36,10 @@
 - Functional components, hooks React.
 - Conventional Commits + Changelog.
 
+## UI Notes
+
+- Tooltip skor: label "Skor:" dan nilainya menggunakan warna yang sama dengan `fillColor` wilayah (fungsi `colorForValue`) dan ditampilkan tebal (bold).
+
 ## Dependency Tips
 - `react-leaflet@4` kompatibel dengan React 18.
 - Import `leaflet/dist/leaflet.css` sekali di `main.tsx`.

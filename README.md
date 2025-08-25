@@ -12,6 +12,7 @@ Peta Indonesia berbasis React + Vite menggunakan Leaflet. Menampilkan peta yang 
 - Penggabungan (dissolve) polygon kecamatan bernama sama menjadi satu boundary.
 - Tombol kembali untuk keluar dari mode fokus kecamatan ke semua kecamatan/kabupaten.
 - Menampilkan nilai dummy pada tooltip dan pewarnaan choropleth per level (prov/kab/kec) agar UI dapat diuji tanpa API.
+ - Tooltip: label "Skor:" dan angka skor otomatis BERWARNA sama dengan warna blok wilayah dan dalam gaya bold.
 
 ## Tech Stack
 - React 18 + Vite 5
@@ -67,7 +68,7 @@ npm run preview
   - Provinsi: gunakan `feature.properties.prov_id`
   - Kabupaten/Kota: gunakan nama yang sudah dinormalisasi (tanpa prefiks "Kabupaten", "Kota", dll.)
   - Kecamatan: gunakan `feature.properties.district_key`
-- Skor tampil di tooltip dan memengaruhi warna fill (choropleth). Jika tidak ingin pewarnaan dummy, hapus pemanggilan `dummyScore(...)` dan gunakan warna netral.
+- Skor tampil di tooltip dan memengaruhi warna fill (choropleth). Tooltip menampilkan label "Skor:" dan nilai skor dengan warna yang sama seperti `fillColor` wilayah (fungsi `colorForValue`) dan bertipe bold. Jika tidak ingin pewarnaan dummy, hapus pemanggilan `dummyScore(...)` dan gunakan warna netral.
 
 ### Interaksi Kecamatan
 - Klik salah satu kecamatan untuk auto-zoom dan hanya menampilkan boundary kecamatan tersebut.

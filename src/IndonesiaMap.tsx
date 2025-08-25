@@ -376,7 +376,8 @@ function ProvincesLayer({ onProvinceClick }: { onProvinceClick: ClickHandlers['o
         const title = p.prov_name || p.name || 'Provinsi'
         const pid = String(p.prov_id ?? '')
         const score = pid ? dummyScore(pid) : null
-        const scoreHtml = score != null ? `<br/><small>Skor: <strong>${score}</strong></small>` : ''
+        const color = colorForValue(score ?? undefined)
+        const scoreHtml = score != null ? `<br/><small><strong style="color: ${color}">Skor:</strong> <strong style="color: ${color}">${score}</strong></small>` : ''
         layer.bindTooltip(`<strong>Provinsi:</strong> ${String(title)}${scoreHtml}`, { sticky: true })
         layer.on('mouseover', () => {
           ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.7 })
@@ -418,7 +419,8 @@ function KabupatenLayer({ provId, onKabupatenClick }: { provId: string, onKabupa
         const title = p.name || 'Kabupaten/Kota'
         const kabName = normalizeRegencyName(String(p.name || ''))
         const score = kabName ? dummyScore(`kab:${kabName}`) : null
-        const scoreHtml = score != null ? `<br/><small>Skor: <strong>${score}</strong></small>` : ''
+        const color = colorForValue(score ?? undefined)
+        const scoreHtml = score != null ? `<br/><small><strong style="color: ${color}">Skor:</strong> <strong style="color: ${color}">${score}</strong></small>` : ''
         layer.bindTooltip(`<strong>Kabupaten:</strong> ${String(title)}${scoreHtml}`, { sticky: true })
         layer.on('mouseover', () => {
           ;(layer as any).setStyle?.({ weight: 2.5, fillOpacity: 0.65 })
@@ -553,7 +555,8 @@ function KecamatanLayer({ provCode, kabName, selectedKec, setSelectedKec }: { pr
           const title = p.district || p.name || 'Kecamatan'
           const key = String(p.district_key || '')
           const score = key ? dummyScore(`kec:${key}`) : null
-          const scoreHtml = score != null ? `<br/><small>Skor: <strong>${score}</strong></small>` : ''
+          const color = colorForValue(score ?? undefined)
+          const scoreHtml = score != null ? `<br/><small><strong style="color: ${color}">Skor:</strong> <strong style="color: ${color}">${score}</strong></small>` : ''
           // When focused on a kecamatan (selectedKec set), do not show tooltip
           if (!selectedKec) {
             layer.bindTooltip(`<strong>Kecamatan:</strong> ${String(title)}${scoreHtml}`, { sticky: true })
