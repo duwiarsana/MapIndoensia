@@ -75,6 +75,25 @@ npm run preview
 - Gunakan tombol "Back to All Kecamatan" untuk kembali menampilkan seluruh kecamatan dalam kabupaten aktif.
 - Breadcrumb/controls menampilkan level navigasi saat ini.
 
+## Alur Interaksi Peta
+
+Diagram berikut merangkum alur navigasi dan tooltip pada peta.
+
+```mermaid
+flowchart TD
+    A[Start App: Provinces Layer] -->|Click Province| B[Zoom ke Provinsi + tampilkan Kabupaten Layer]
+    B -->|Click Kabupaten| C[Zoom ke Kabupaten + tampilkan Kecamatan Layer]
+    C -->|Click Kecamatan| D[Pilih Kecamatan + Highlight + Update Breadcrumb]
+    A -.->|Hover / Tooltip| T[Tooltip: label "Skor:" dan nilai tebal + warna mengikuti fillColor]
+    B -.->|Hover / Tooltip| T
+    C -.->|Hover / Tooltip| T
+    D -->|Back / Reset| A
+```
+
+Catatan:
+
+- Tooltip menggunakan warna yang sama dengan warna blok wilayah (`fillColor`) dan ditampilkan tebal (bold) untuk label "Skor:" serta nilainya.
+
 ### Opsi Tile Umum
 - OpenStreetMap Standard (labels):
   - `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`
