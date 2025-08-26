@@ -86,8 +86,9 @@ flowchart TD
     B -->|Click Kabupaten| C[Zoom ke Kabupaten + tampilkan Kecamatan Layer]
     C -->|Click Kecamatan| D[Pilih Kecamatan + Highlight]
 
-    %% Aksi kembali (controls/breadcrumb)
+    %% Aksi kembali (controls/breadcrumb/klik area kosong)
     D -->|Back to All Kecamatan| C
+    D -->|Click empty map area| C
     C -->|Back to Provinces| A
 
     %% Pipa data skor untuk pewarnaan + tooltip
@@ -151,6 +152,7 @@ flowchart TD
 Catatan:
 
 - Tooltip menggunakan warna yang sama dengan warna blok wilayah (`fillColor`) dan ditampilkan tebal (bold) untuk label "Skor:" serta nilainya.
+ - Klik area kosong pada peta saat fokus kecamatan akan keluar dari fokus (kembali menampilkan semua kecamatan pada kabupaten aktif).
 
 ### Opsi Tile Umum
 - OpenStreetMap Standard (labels):
