@@ -3,6 +3,7 @@
 Peta Indonesia berbasis React + Vite menggunakan Leaflet. Menampilkan peta yang dapat digerakkan/di-zoom. Default tile: OpenStreetMap Standard (labels). Tujuan: sederhana, mudah dikembangkan oleh manusia maupun AI.
 
 ## Fitur
+
 - Fullscreen map halaman tunggal.
 - Interaktif: drag, scroll zoom, double-click zoom.
 - Pusat dan zoom awal ke Indonesia (`center={[-2, 118]}`, `zoom={5}`).
@@ -12,15 +13,17 @@ Peta Indonesia berbasis React + Vite menggunakan Leaflet. Menampilkan peta yang 
 - Penggabungan (dissolve) polygon kecamatan bernama sama menjadi satu boundary.
 - Tombol kembali untuk keluar dari mode fokus kecamatan ke semua kecamatan/kabupaten.
 - Menampilkan nilai dummy pada tooltip dan pewarnaan choropleth per level (prov/kab/kec) agar UI dapat diuji tanpa API.
- - Tooltip: label "Skor:" dan angka skor otomatis BERWARNA sama dengan warna blok wilayah dan dalam gaya bold.
+- Tooltip: label "Skor:" dan angka skor otomatis BERWARNA sama dengan warna blok wilayah dan dalam gaya bold.
 
 ## Tech Stack
+
 - React 18 + Vite 5
 - TypeScript
 - Leaflet + react-leaflet
 
 ## Struktur Proyek
-```
+
+```text
 / (root)
 ├─ index.html
 ├─ vite.config.ts
@@ -39,23 +42,30 @@ Peta Indonesia berbasis React + Vite menggunakan Leaflet. Menampilkan peta yang 
 ```
 
 ## Menjalankan
-1) Install dependencies
+
+1. Install dependencies
+
 ```bash
 npm install
 ```
-2) Jalankan dev server
+
+1. Jalankan dev server
+
 ```bash
 npm run dev
 ```
-3) Buka di browser: http://localhost:5173
+
+1. Buka di browser: <http://localhost:5173>
 
 ## Build & Preview
+
 ```bash
 npm run build
 npm run preview
 ```
 
 ## Pengaturan Peta (utama)
+
 - File: `src/IndonesiaMap.tsx`
 - Properti penting:
   - `center`, `zoom`, `minZoom`
@@ -64,6 +74,7 @@ npm run preview
 - Batas Indonesia (opsional): gunakan `maxBounds={indonesiaBounds}` untuk membatasi panning.
 
 ### Nilai Dummy & Pewarnaan
+
 - Komponen memunculkan skor dummy (deterministik) berbasis ID fitur agar stabil di reload:
   - Provinsi: gunakan `feature.properties.prov_id`
   - Kabupaten/Kota: gunakan nama yang sudah dinormalisasi (tanpa prefiks "Kabupaten", "Kota", dll.)
@@ -71,6 +82,7 @@ npm run preview
 - Skor tampil di tooltip dan memengaruhi warna fill (choropleth). Tooltip menampilkan label "Skor:" dan nilai skor dengan warna yang sama seperti `fillColor` wilayah (fungsi `colorForValue`) dan bertipe bold. Jika tidak ingin pewarnaan dummy, hapus pemanggilan `dummyScore(...)` dan gunakan warna netral.
 
 ### Interaksi Kecamatan
+
 - Klik salah satu kecamatan untuk auto-zoom dan hanya menampilkan boundary kecamatan tersebut.
 - Gunakan tombol "Back to All Kecamatan" untuk kembali menampilkan seluruh kecamatan dalam kabupaten aktif.
 - Breadcrumb/controls menampilkan level navigasi saat ini.
@@ -169,39 +181,46 @@ Catatan:
 Catatan: beberapa provider membutuhkan attribution dan/atau API key. Sesuaikan `attribution` dan kebijakan penggunaan masing-masing provider.
 
 ## Troubleshooting
+
 - Halaman putih atau tile tidak muncul: cek Network tab apakah domain tile terblokir.
 - Type error untuk paket map: pastikan `react-leaflet@4`, `leaflet`, dan `@types/leaflet` terpasang.
 - Peta terlalu jauh/terdekat: atur `center` dan `zoom`.
- - Jika setelah klik kecamatan masih terlihat kecamatan lain: pastikan data nama konsisten. Aplikasi sudah melakukan normalisasi nama ("Kecamatan", "Kec."). Laporkan nama kabupaten/kecamatan bila masih terjadi.
+- Jika setelah klik kecamatan masih terlihat kecamatan lain: pastikan data nama konsisten. Aplikasi sudah melakukan normalisasi nama ("Kecamatan", "Kec."). Laporkan nama kabupaten/kecamatan bila masih terjadi.
 
 ## Lisensi Data Tile
+
 - Menggunakan OSM default: attribution wajib ditampilkan. Jangan sembunyikan attribution untuk layer yang mensyaratkannya.
 
 ## Kontribusi
+
 Lihat `CONTRIBUTING.md` untuk panduan kontribusi dan standar commit.
 
 ## Menghubungkan ke API Nyata
 
 Jika ingin menampilkan nilai nyata dari API:
 
-1) Siapkan environment variable
-```
+1. Siapkan environment variable
+
+```bash
 cp .env.example .env
 # Edit .env --> set VITE_API ke base backend kamu
 ```
 
-2) Gunakan base `${VITE_API}/api`
+1. Gunakan base `${VITE_API}/api`
+
 - Contoh endpoint yang diharapkan (selaras dengan proyek referensi):
   - `/province-population`
   - `/kabupaten-population?provId={prov_id}`
   - `/kecamatan-population?kabupaten={nama_kabupaten_ternormalisasi}`
 
-3) Mapping kolom ID
+1. Mapping kolom ID
+
 - Provinsi: `geoId` dari API → cocokan ke `feature.properties.prov_id`.
 - Kabupaten/Kota: normalisasi nama (hapus prefiks seperti "Kabupaten", "Kota") sebelum dicocokkan dengan `feature.properties.name`.
 - Kecamatan: gunakan `district_key`/kode unik (atau `kecamatan_code` bila tersedia) → cocokan ke `feature.properties.district_key`.
 
-4) Langkah implementasi cepat
+1. Langkah implementasi cepat
+
 - Buat fungsi fetch JSON (axios/fetch) yang membaca `import.meta.env.VITE_API`.
 - Simpan hasil ke map/dictionary by key (geoId/nama_norm/district_key).
 - Pada `style` dan `onEachFeature`, baca skor dari dictionary tersebut; fallback ke warna netral jika tidak ada.
@@ -209,13 +228,16 @@ cp .env.example .env
 Catatan: Dummy score saat ini tetap aktif. Saat API sudah siap, gantikan pemanggilan `dummyScore(...)` dengan lookup ke data API.
 
 ### Memuat Lokasi Sekolah (API) pada Fokus Kecamatan
+
 Saat user mengklik sebuah kecamatan, aplikasi akan fokus pada boundary kecamatan tersebut. Untuk menampilkan node lokasi sekolah dari API (mengganti dummy nodes):
 
-1) Endpoint yang disarankan
+1. Endpoint yang disarankan
+
 - GET `${VITE_API}/api/schools?district_key={district_key}`
 - Alternatif jika tidak ada `district_key`: gunakan `kabupaten` + `kecamatan` ter-normalisasi.
 
-2) Bentuk respons (contoh)
+1. Bentuk respons (contoh)
+
 ```json
 [
   { "id": "sch_1", "name": "SDN Sample 1", "lat": -6.2, "lng": 106.8, "level": "SD" },
@@ -223,11 +245,13 @@ Saat user mengklik sebuah kecamatan, aplikasi akan fokus pada boundary kecamatan
 ]
 ```
 
-3) Cara mapping
+1. Cara mapping
+
 - `district_key` dipakai dari `feature.properties.district_key` pada kecamatan yang difokuskan.
 - Pastikan `lat/lng` valid dan berada di dalam boundary kecamatan.
 
-4) Contoh pseudocode integrasi di `KecamatanLayer`
+1. Contoh pseudocode integrasi di `KecamatanLayer`
+
 ```ts
 const HOST = import.meta.env.VITE_API
 const [schools, setSchools] = React.useState<SchoolPoint[] | null>(null)
@@ -248,13 +272,15 @@ React.useEffect(() => {
 ))}
 ```
 
-5) Catatan penting
+1. Catatan penting
+
 - Gunakan `VITE_API` dari `.env` untuk base URL.
 - Jaga fallback: jika API gagal/empty, bisa tampilkan pesan atau sembunyikan marker.
 - Warna/ikon marker bisa dikodekan berdasarkan `level` (SD/SMP/SMA) bila tersedia.
 - Jika backend menyediakan filter tambahan (tahun, status, dsb.), tambahkan query param sesuai kebutuhan.
 
 ## Ubah Endpoints/Skema dengan Aman
+
 - Semua logika nilai berada di `src/IndonesiaMap.tsx` pada layer: `ProvincesLayer`, `KabupatenLayer`, `KecamatanLayer`.
 - Ubah sumber skor di fungsi `style` dan `onEachFeature` per layer.
 - Jika kunci ID API berbeda, sesuaikan normalisasi dan pemetaan kunci sebelum dipakai untuk lookup skor.
@@ -263,24 +289,28 @@ React.useEffect(() => {
 
 Repo ini menggunakan Git LFS untuk file besar GeoJSON di folder `public/data/indonesia-district-master 3/`.
 
-1) Instal Git LFS (sekali saja)
+1. Instal Git LFS (sekali saja)
+
 ```bash
 git lfs install
 ```
 
-2) Pola track yang dipakai (sudah di `.gitattributes`)
+1. Pola track yang dipakai (sudah di `.gitattributes`)
+
 ```bash
 git lfs track "public/data/indonesia-district-master 3/**/*.geojson"
 ```
 
-3) Commit & push seperti biasa
+1. Commit & push seperti biasa
+
 ```bash
 git add .gitattributes "public/data/indonesia-district-master 3"
 git commit -m "chore(lfs): track large district GeoJSON with Git LFS"
 git push
 ```
 
-4) Clone/pull pengguna
+1. Clone/pull pengguna
+
 - Pastikan sudah menjalankan `git lfs install` di mesin lokal.
 - Lakukan `git pull` seperti biasa; Git LFS akan mengunduh konten besar secara otomatis.
 
@@ -290,7 +320,8 @@ Tips: Jika bandwidth terbatas, bisa membatasi folder/provinsi tertentu atau mela
 
 Anda dapat menggunakan komponen peta langsung di aplikasi lain.
 
-1) Import komponen
+1. Import komponen
+
 ```tsx
 import IndonesiaMap from './src/IndonesiaMap'
 
@@ -303,12 +334,14 @@ export default function Page() {
 }
 ```
 
-2) Opsi konfigurasi umum
+1. Opsi konfigurasi umum
+
 - Pusat/zoom awal dapat diubah dari dalam `IndonesiaMap.tsx` (`center`, `zoom`, `minZoom`).
 - Tile dapat diganti mengubah `TileLayer.url` & `TileLayer.attribution`.
 - Pembatasan panning: set `maxBounds` (lihat variabel `indonesiaBounds`).
 
-3) Override atau kustomisasi
+1. Override atau kustomisasi
+
 - Untuk integrasi yang lebih dalam, Anda bisa fork file `src/IndonesiaMap.tsx` dan mengekspos props (mis. `initialCenter`, `initialZoom`, `tileUrl`).
 
 ## Kontrak API yang Dipakai
@@ -359,7 +392,8 @@ Catatan mapping kunci:
 
 ## Contoh Kode Siap Pakai
 
-1) Minimal embed
+1. Minimal embed
+
 ```tsx
 import IndonesiaMap from './src/IndonesiaMap'
 
@@ -368,7 +402,8 @@ export default function App() {
 }
 ```
 
-2) Memuat sekolah saat kecamatan dipilih (pseudocode ringkas)
+1. Memuat sekolah saat kecamatan dipilih (pseudocode ringkas)
+
 ```tsx
 const HOST = import.meta.env.VITE_API
 const [schools, setSchools] = React.useState([])
